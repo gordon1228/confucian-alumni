@@ -1,4 +1,4 @@
-// src/hooks/useFetch.js
+// src/hooks/useFetch.js (corrected filename)
 import { useState, useEffect } from 'react';
 
 export const useFetch = (fetchFunction, dependencies = []) => {
@@ -35,9 +35,17 @@ export const useFetch = (fetchFunction, dependencies = []) => {
     };
   }, dependencies);
 
-  const refetch = () => {
-    setLoading(true);
-    fetchData();
+  const refetch = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await fetchFunction();
+      setData(result.data);
+    } catch (err) {
+      setError(err.message || 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return { data, loading, error, refetch };

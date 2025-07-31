@@ -1,4 +1,6 @@
 // middleware/errorHandler.js
+const multer = require('multer'); // Add this import
+
 const errorHandler = (error, req, res, next) => {
   console.error(error.stack);
   
