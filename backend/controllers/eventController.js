@@ -1,82 +1,132 @@
-// controllers/eventController.js
-const { events, generateId } = require('../config/database');
+// backend/controllers/eventController.js - Updated for SQL Server
+const { Event, EventRegistration } = require('../models');
 
 const eventController = {
   // Get all events
-  getAllEvents: (req, res) => {
-    const { category, status, limit } = req.query;
-    let filteredEvents = [...events];
-
-    if (category) {
-      filteredEvents = filteredEvents.filter(event => event.category === category);
+  getAllEvents: async (req, res) => {
+    try {
+      const { category, status, limit } = req.query;
+      const conditions = {};
+      
+      if (category) conditions.category = category;
+      if (status) conditions.status = status;
+      
+      const events = await Event.findAll(conditions, 'event_date DESC', limit ? parseInt(limit) : null);
+      
+      res.json({
+        success: true,
+        data: events
+      });
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取活动列表失败'
+      });
     }
-
-    if (status) {
-      filteredEvents = filteredEvents.filter(event => event.status === status);
-    }
-
-    if (limit) {
-      filteredEvents = filteredEvents.slice(0, parseInt(limit));
-    }
-
-    res.json({
-      success: true,
-      data: filteredEvents.sort((a, b) => new Date(b.date) - new Date(a.date))
-    });
   },
 
   // Get single event
-  getEventById: (req, res) => {
-    const event = events.find(e => e.id === parseInt(req.params.id));
-    if (!event) {
-      return res.status(404).json({ success: false, message: '活动不存在' });
+  getEventById: async (req, res) => {
+    try {
+      const event = await Event.findById(parseInt(req.params.id));
+      
+      if (!event) {
+        return res.status(404).json({ 
+          success: false, 
+          message: '活动不存在' 
+        });
+      }
+      
+      res.json({ 
+        success: true, 
+        data: event 
+      });
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取活动详情失败'
+      });
     }
-    res.json({ success: true, data: event });
   },
 
   // Create new event
-  createEvent: (req, res) => {
-    const newEvent = {
-      id: generateId(events),
-      ...req.body,
-      status: 'upcoming',
-      currentParticipants: 0,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+  createEvent: async (req, res) => {
+    try {
+      const eventData = {
+        ...req.body,
+        status: 'upcoming',
+        current_participants: 0
+      };
 
-    events.push(newEvent);
-    res.status(201).json({ success: true, data: newEvent });
+      const newEvent = await Event.create(eventData);
+      
+      res.status(201).json({ 
+        success: true, 
+        data: newEvent 
+      });
+    } catch (error) {
+      console.error('Error creating event:', error);
+      res.status(500).json({
+        success: false,
+        message: '创建活动失败'
+      });
+    }
   },
 
   // Register for event
-  registerForEvent: (req, res) => {
-    const event = events.find(e => e.id === parseInt(req.params.id));
-    if (!event) {
-      return res.status(404).json({ success: false, message: '活动不存在' });
-    }
-
-    if (!event.registrationOpen) {
-      return res.status(400).json({ success: false, message: '活动报名已关闭' });
-    }
-
-    if (event.maxParticipants && event.currentParticipants >= event.maxParticipants) {
-      return res.status(400).json({ success: false, message: '活动报名已满' });
-    }
-
-    event.currentParticipants += 1;
-    event.updatedAt = new Date();
-
-    res.json({
-      success: true,
-      message: '报名成功！我们会通过邮件联系您',
-      data: {
-        eventId: event.id,
-        eventTitle: event.title,
-        registrationNumber: `REG${Date.now()}`
+  registerForEvent: async (req, res) => {
+    try {
+      const eventId = parseInt(req.params.id);
+      const event = await Event.findById(eventId);
+      
+      if (!event) {
+        return res.status(404).json({ 
+          success: false, 
+          message: '活动不存在' 
+        });
       }
-    });
+
+      if (!event.registration_open) {
+        return res.status(400).json({ 
+          success: false, 
+          message: '活动报名已关闭' 
+        });
+      }
+
+      if (event.max_participants && event.current_participants >= event.max_participants) {
+        return res.status(400).json({ 
+          success: false, 
+          message: '活动报名已满' 
+        });
+      }
+
+      // Create registration record
+      const registration = await EventRegistration.createRegistration(eventId, req.body);
+      
+      // Increment participant count
+      await Event.incrementParticipants(eventId);
+
+      res.json({
+        success: true,
+        message: '报名成功！我们会通过邮件联系您',
+        data: {
+          eventId: event.id,
+          eventTitle: event.title,
+          registrationNumber: registration.registration_number
+        }
+      });
+    } catch (error) {
+      console.error('Error registering for event:', error);
+      res.status(500).json({
+        success: false,
+        message: '报名失败，请稍后重试'
+      });
+    }
   }
 };
 
 module.exports = eventController;
+// This controller handles events, allowing users to view, create, and register for events.
+// It includes methods for fetching all events, getting a single event by ID, creating new events

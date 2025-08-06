@@ -1,3 +1,4 @@
+// Fixed frontend/src/services/api.js
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -57,17 +58,8 @@ export const apiService = {
   // Scholarships
   getScholarships: (params) => api.get('/scholarships', { params }),
   applyScholarship: (data) => {
-    const formData = new FormData();
-    Object.keys(data).forEach(key => {
-      if (data[key] instanceof FileList) {
-        Array.from(data[key]).forEach(file => {
-          formData.append(key, file);
-        });
-      } else {
-        formData.append(key, data[key]);
-      }
-    });
-    return api.post('/scholarships/apply', formData, {
+    // Fixed: Handle FormData properly
+    return api.post('/scholarships/apply', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
