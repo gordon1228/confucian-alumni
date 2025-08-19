@@ -1,4 +1,4 @@
-// backend/controllers/eventController.js - Updated for SQL Server
+// backend/controllers/eventController.js - Fixed Date Handling for SQL Server
 const { Event, EventRegistration } = require('../models');
 
 const eventController = {
@@ -13,9 +13,22 @@ const eventController = {
       
       const events = await Event.findAll(conditions, 'event_date DESC', limit ? parseInt(limit) : null);
       
+      // ✅ Fix date formatting for frontend
+      const formattedEvents = events.map(event => ({
+        ...event,
+        // Ensure date is properly formatted
+        date: event.eventDate || event.event_date, // Handle both camelCase and snake_case
+        eventDate: event.eventDate || event.event_date,
+        // Format time if exists
+        time: event.eventTime || event.event_time,
+        eventTime: event.eventTime || event.event_time,
+        // Ensure date is in ISO format for frontend
+        formattedDate: event.eventDate ? new Date(event.eventDate).toISOString().split('T')[0] : null
+      }));
+      
       res.json({
         success: true,
-        data: events
+        data: formattedEvents
       });
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -37,10 +50,20 @@ const eventController = {
           message: '活动不存在' 
         });
       }
+
+      // ✅ Fix date formatting for single event
+      const formattedEvent = {
+        ...event,
+        date: event.eventDate || event.event_date,
+        eventDate: event.eventDate || event.event_date,
+        time: event.eventTime || event.event_time,
+        eventTime: event.eventTime || event.event_time,
+        formattedDate: event.eventDate ? new Date(event.eventDate).toISOString().split('T')[0] : null
+      };
       
       res.json({ 
         success: true, 
-        data: event 
+        data: formattedEvent 
       });
     } catch (error) {
       console.error('Error fetching event:', error);
@@ -57,14 +80,39 @@ const eventController = {
       const eventData = {
         ...req.body,
         status: 'upcoming',
-        current_participants: 0
+        current_participants: 0,
+        // ✅ Ensure date fields are properly formatted
+        event_date: req.body.date || req.body.eventDate || req.body.event_date,
+        event_time: req.body.time || req.body.eventTime || req.body.event_time
       };
+
+      // ✅ Validate date format
+      if (eventData.event_date) {
+        const date = new Date(eventData.event_date);
+        if (isNaN(date.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: '无效的日期格式'
+          });
+        }
+        // Convert to SQL Server date format (YYYY-MM-DD)
+        eventData.event_date = date.toISOString().split('T')[0];
+      }
 
       const newEvent = await Event.create(eventData);
       
+      // ✅ Format response with proper date fields
+      const formattedEvent = {
+        ...newEvent,
+        date: newEvent.eventDate || newEvent.event_date,
+        eventDate: newEvent.eventDate || newEvent.event_date,
+        time: newEvent.eventTime || newEvent.event_time,
+        eventTime: newEvent.eventTime || newEvent.event_time
+      };
+      
       res.status(201).json({ 
         success: true, 
-        data: newEvent 
+        data: formattedEvent 
       });
     } catch (error) {
       console.error('Error creating event:', error);
@@ -88,14 +136,14 @@ const eventController = {
         });
       }
 
-      if (!event.registration_open) {
+      if (!event.registrationOpen) {
         return res.status(400).json({ 
           success: false, 
           message: '活动报名已关闭' 
         });
       }
 
-      if (event.max_participants && event.current_participants >= event.max_participants) {
+      if (event.maxParticipants && event.currentParticipants >= event.maxParticipants) {
         return res.status(400).json({ 
           success: false, 
           message: '活动报名已满' 
@@ -114,7 +162,7 @@ const eventController = {
         data: {
           eventId: event.id,
           eventTitle: event.title,
-          registrationNumber: registration.registration_number
+          registrationNumber: registration.registrationNumber || registration.registration_number
         }
       });
     } catch (error) {
@@ -128,5 +176,3 @@ const eventController = {
 };
 
 module.exports = eventController;
-// This controller handles events, allowing users to view, create, and register for events.
-// It includes methods for fetching all events, getting a single event by ID, creating new events

@@ -228,6 +228,72 @@ const startServer = async () => {
   }
 };
 
+app.get('/api/debug/events', async (req, res) => {
+  try {
+    const { getDB } = require('./config/database');
+    const pool = await getDB();
+    
+    // Raw SQL query to see what's actually in the database
+    const result = await pool.request().query(`
+      SELECT TOP 5 
+        id,
+        title,
+        event_date,
+        event_time,
+        CONVERT(varchar, event_date, 23) as formatted_date,
+        CONVERT(varchar, event_time, 108) as formatted_time
+      FROM events 
+      ORDER BY id DESC
+    `);
+    
+    console.log('Raw database result:', result.recordset);
+    
+    // Also test the model transformation
+    const { Event } = require('./models');
+    const modelResult = await Event.findAll({}, 'id DESC', 5);
+    
+    console.log('Model transformed result:', modelResult);
+    
+    res.json({
+      success: true,
+      data: {
+        raw: result.recordset,
+        transformed: modelResult,
+        debug: {
+          message: 'Check server console for detailed logs'
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Debug error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Also add this helper function to format dates consistently
+const formatEventDate = (dateValue) => {
+  if (!dateValue) return null;
+  
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date value:', dateValue);
+      return null;
+    }
+    
+    // Return in YYYY-MM-DD format
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return null;
+  }
+};
+
+module.exports = { formatEventDate };
+
 // Start the server
 startServer();
 
