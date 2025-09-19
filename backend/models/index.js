@@ -1,4 +1,4 @@
-// backend/models/index.js - Fixed Database Models for SQL Server
+// backend/models/index.js - Fixed Date Handling for SQL Server
 const { getDB, sql } = require('../config/database');
 
 // Base Model Class
@@ -36,8 +36,8 @@ class BaseModel {
       });
       
       const result = await request.query(query);
-      // Transform results back to camelCase
-      return result.recordset.map(row => this.transformToCamelCase(row));
+      // Transform results back to camelCase with proper date handling
+      return result.recordset.map(row => this.transformToCamelCaseWithDates(row));
     } catch (error) {
       console.error(`Error in findAll for ${this.tableName}:`, error);
       throw error;
@@ -52,7 +52,7 @@ class BaseModel {
         .query(`SELECT * FROM ${this.tableName} WHERE id = @id`);
       
       const record = result.recordset[0] || null;
-      return record ? this.transformToCamelCase(record) : null;
+      return record ? this.transformToCamelCaseWithDates(record) : null;
     } catch (error) {
       console.error(`Error in findById for ${this.tableName}:`, error);
       throw error;
@@ -79,18 +79,26 @@ class BaseModel {
       const request = pool.request();
 
       keys.forEach(key => {
-        request.input(key, transformedData[key]);
+        const value = transformedData[key];
+        // ✅ Handle date values properly
+        if (key.includes('date') && value) {
+          request.input(key, sql.Date, new Date(value));
+        } else if (key.includes('time') && value) {
+          request.input(key, sql.Time, value);
+        } else {
+          request.input(key, value);
+        }
       });
 
       const result = await request.query(query);
-      return this.transformToCamelCase(result.recordset[0]);
+      return this.transformToCamelCaseWithDates(result.recordset[0]);
     } catch (error) {
       console.error(`Error in create for ${this.tableName}:`, error);
       throw error;
     }
   }
 
-  // Helper method to convert camelCase to snake_case
+  // ✅ Enhanced: Convert camelCase to snake_case
   transformToSnakeCase(obj) {
     if (!obj || typeof obj !== 'object') return obj;
     
@@ -102,16 +110,31 @@ class BaseModel {
     return transformed;
   }
 
-  // Helper method to convert snake_case to camelCase
-  transformToCamelCase(obj) {
+  // ✅ Enhanced: Convert snake_case to camelCase with proper date handling
+  transformToCamelCaseWithDates(obj) {
     if (!obj || typeof obj !== 'object') return obj;
     
     const transformed = {};
     for (const [key, value] of Object.entries(obj)) {
       const camelKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase());
-      transformed[camelKey] = value;
+      
+      // ✅ Handle date fields properly
+      if ((key.includes('date') || key.includes('_at')) && value instanceof Date) {
+        // For date fields, ensure they're in ISO format
+        transformed[camelKey] = value.toISOString().split('T')[0];
+      } else if (key.includes('time') && value) {
+        // For time fields, convert to string if it's a time object
+        transformed[camelKey] = typeof value === 'string' ? value : value.toString();
+      } else {
+        transformed[camelKey] = value;
+      }
     }
     return transformed;
+  }
+
+  // ✅ Keep the original method for backward compatibility
+  transformToCamelCase(obj) {
+    return this.transformToCamelCaseWithDates(obj);
   }
 
   async update(id, data) {
@@ -136,11 +159,19 @@ class BaseModel {
 
       request.input('id', sql.Int, id);
       Object.keys(transformedData).forEach(key => {
-        request.input(key, transformedData[key]);
+        const value = transformedData[key];
+        // ✅ Handle date values properly
+        if (key.includes('date') && value) {
+          request.input(key, sql.Date, new Date(value));
+        } else if (key.includes('time') && value) {
+          request.input(key, sql.Time, value);
+        } else {
+          request.input(key, value);
+        }
       });
       
       const result = await request.query(query);
-      return result.recordset[0] ? this.transformToCamelCase(result.recordset[0]) : null;
+      return result.recordset[0] ? this.transformToCamelCaseWithDates(result.recordset[0]) : null;
     } catch (error) {
       console.error(`Error in update for ${this.tableName}:`, error);
       throw error;
@@ -177,7 +208,7 @@ class Member extends BaseModel {
         .query('SELECT * FROM members WHERE email = @email');
       
       const record = result.recordset[0];
-      return record ? this.transformToCamelCase(record) : null;
+      return record ? this.transformToCamelCaseWithDates(record) : null;
     } catch (error) {
       console.error('Error in findByEmail:', error);
       throw error;
@@ -223,7 +254,7 @@ class Event extends BaseModel {
           ORDER BY event_date ASC
         `);
       
-      return result.recordset.map(row => this.transformToCamelCase(row));
+      return result.recordset.map(row => this.transformToCamelCaseWithDates(row));
     } catch (error) {
       console.error('Error in getUpcoming:', error);
       throw error;
@@ -242,7 +273,7 @@ class Event extends BaseModel {
           WHERE id = @id
         `);
       
-      return result.recordset[0] ? this.transformToCamelCase(result.recordset[0]) : null;
+      return result.recordset[0] ? this.transformToCamelCaseWithDates(result.recordset[0]) : null;
     } catch (error) {
       console.error('Error in incrementParticipants:', error);
       throw error;
@@ -267,7 +298,7 @@ class News extends BaseModel {
           ORDER BY publish_date DESC
         `);
       
-      return result.recordset.map(row => this.transformToCamelCase(row));
+      return result.recordset.map(row => this.transformToCamelCaseWithDates(row));
     } catch (error) {
       console.error('Error in getFeatured:', error);
       throw error;
